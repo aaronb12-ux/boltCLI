@@ -13,8 +13,8 @@ func home() {
 
 	fmt.Println("\nWelcome to the TODO task manager!\n")
 	fmt.Println("Your following options are:\n")
-	fmt.Println("Add Task")
-	fmt.Println("View Tasks")
+	fmt.Println("Add Task - <command>")
+	fmt.Println("View Tasks - <command>")
 	fmt.Println("Mark Task as Completed")
 	fmt.Println("Type 'help' for a basic rundown of the tool")
 }
