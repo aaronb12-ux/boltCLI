@@ -2,19 +2,27 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
+	"encoding/json"
 	"fmt"
-	"github.com/cristalhq/acmd"
-	"github.com/boltdb/bolt"
 	"log"
+	"github.com/boltdb/bolt"
+	"github.com/cristalhq/acmd"
 )
+
+type Task struct {
+	Id int
+	TaskName string
+}
 
 func home() {
 
 	fmt.Println("\nWelcome to the TODO task manager!\n")
 	fmt.Println("Your following options are:\n")
-	fmt.Println("Add Task")
-	fmt.Println("View Tasks")
-	fmt.Println("Mark Task as Completed")
+	fmt.Println("- Add Task")
+	fmt.Println("- View Tasks")
+	fmt.Println("- Mark Task as Completed")
+	fmt.Println("- Run the program with the <help> argument to see how to use the above operations\n")
 }
 
 func openDataBase() {
@@ -50,14 +58,32 @@ func showTasks() {
 func addKeyValue(args []string) {
 
 	db, _ := bolt.Open("my.db", 0600, nil)
+	t := Task{}
 
 	db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("TasksBucket"))
 
-		err := b.Put([]byte(args[0]), []byte(args[1]))
+		b := tx.Bucket([]byte("TasksBucket")) //open bucket
 
-		return err
+		id, _ := b.NextSequence() //generate ID 
+		t.Id = int(id)
+		t.TaskName = args[0] //fill in task object
+
+		buff, err := json.Marshal(t.TaskName) //marshal user data into bytes
+
+		if err != nil {
+			return err
+		}
+
+		e := b.Put([]byte(itob(t.Id)), buff) //persist bytes to users bucket
+
+		return e
 	})
+}
+
+func itob(v int) []byte {
+	b := make([]byte, 8)
+	binary.BigEndian.PutUint64(b, uint64(v))
+	return b
 }
 
 func initializeBucket() {
@@ -87,8 +113,8 @@ func deleteTask(taskId string) {
 	}
 
 	db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("TasksBucket"))
 
+		b := tx.Bucket([]byte("TasksBucket"))
 		err := b.Delete([]byte(taskId))
 
 		return err
@@ -112,14 +138,14 @@ func main() {
 	{
 		Name: "show",
 		Description: "shows all tasks",
-		ExecFunc: func(ctx context.Context, args []string) error {
+		ExecFunc: func(ctx context.Context, args []string) error {		
 			showTasks()
 			return nil
 		},
 	},
 	{
 		Name: "init",
-		Description: "initialized tasks bucket",
+		Description: "    initialized tasks bucket\n\t    Usage: init\n",
 		ExecFunc: func(ctx context.Context, args []string) error {
 			initializeBucket()
 			return nil
@@ -127,15 +153,16 @@ func main() {
 	},
 	{
 		Name: "add",
-		Description: "adds a task to db",
+		Description: "     adds a task to db\n\t     Usage: add <taskName>\n",
 		ExecFunc: func(ctx context.Context, args []string) error {
+	
 			addKeyValue(args)
 			return nil
 		},
 	},
 	{
 		Name: "complete",
-		Description: "completes a task (removes from db)",
+		Description: "completes a task (removes from db)\n\tUsage: complete <taskID>\n",
 		ExecFunc: func(ctx context.Context, args []string) error {
 			deleteTask(args[0])
 			return nil
@@ -153,7 +180,5 @@ if err := r.Run(); err != nil {
 }
 
 
-//we have a bucket (collection) called 'tasks' that we query from
-//we add key/value pairs to this tasks bucket and read and delete from it
 
 
