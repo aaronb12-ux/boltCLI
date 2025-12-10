@@ -19,37 +19,27 @@ func home() {
 
 	fmt.Println("\nWelcome to the TODO task manager!\n")
 	fmt.Println("Your following options are:\n")
-	fmt.Println("- Add Task")
-	fmt.Println("- View Tasks")
-	fmt.Println("- Mark Task as Completed")
+	fmt.Println("- Initialize Task Bucket: init")
+	fmt.Println("- Add Task: add <taskToAdd>")
+	fmt.Println("- View Tasks: show")
+	fmt.Println("- Mark Task as Completed: complete <taskID>")
 	fmt.Println("- Run the program with the <help> argument to see how to use the above operations\n")
 }
 
-func openDataBase() {
 
-	db, err := bolt.Open("my.db", 0600, nil)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	defer db.Close()
-
-}
 
 func showTasks() {
 
 	db, _ := bolt.Open("my.db", 0600, nil)
 
 	db.View(func(tx *bolt.Tx) error {
-	// Assume bucket exists and has keys
+
 	b := tx.Bucket([]byte("TasksBucket"))
 
-	c := b.Cursor()
-
-	for k, v := c.First(); k != nil; k, v = c.Next() {
-		fmt.Printf("%s. %s\n", k, v)
-	}
+	b.ForEach(func(k, v []byte) error {
+		fmt.Printf("key=%s, value=%s\n", k, v)
+		return nil
+	})
 
 	return nil
 })
@@ -58,24 +48,22 @@ func showTasks() {
 func addKeyValue(args []string) {
 
 	db, _ := bolt.Open("my.db", 0600, nil)
-	t := Task{}
+	
 
 	db.Update(func(tx *bolt.Tx) error {
 
 		b := tx.Bucket([]byte("TasksBucket")) //open bucket
 
 		id, _ := b.NextSequence() //generate ID 
-		t.Id = int(id)
-		t.TaskName = args[0] //fill in task object
 
-		buff, err := json.Marshal(t.TaskName) //marshal user data into bytes
+		buff, err := json.Marshal(args[0]) //marshal task data into bytes
 
 		if err != nil {
 			return err
 		}
 
-		e := b.Put([]byte(itob(t.Id)), buff) //persist bytes to users bucket
-
+		e := b.Put([]byte(itob(int(id))), buff) //persist bytes to users bucket
+		
 		return e
 	})
 }
@@ -121,6 +109,28 @@ func deleteTask(taskId string) {
 	})
 }
 
+func deleteBucket() {
+
+	db, err := bolt.Open("my.db", 0600, nil)
+	
+
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("TasksBucket"))
+
+		b.ForEach(func(k, v []byte) error {
+		
+		err := b.Delete([]byte(k))
+		
+		return err
+	})
+
+		return err
+	})
+}
 
 
 func main() {
@@ -131,7 +141,6 @@ func main() {
 		Description: "shows home screen",
 		ExecFunc: func(ctx context.Context, args []string) error {
 			home()
-			openDataBase()
 			return nil
 		},
 	},
@@ -145,7 +154,7 @@ func main() {
 	},
 	{
 		Name: "init",
-		Description: "    initialized tasks bucket\n\t    Usage: init\n",
+		Description: "initializes tasks bucket",
 		ExecFunc: func(ctx context.Context, args []string) error {
 			initializeBucket()
 			return nil
@@ -153,19 +162,27 @@ func main() {
 	},
 	{
 		Name: "add",
-		Description: "     adds a task to db\n\t     Usage: add <taskName>\n",
+		Description: "adds a task to database",
 		ExecFunc: func(ctx context.Context, args []string) error {
-	
 			addKeyValue(args)
 			return nil
 		},
 	},
 	{
 		Name: "complete",
-		Description: "completes a task (removes from db)\n\tUsage: complete <taskID>\n",
+		Description: "completes a task (removes from db)",
 		ExecFunc: func(ctx context.Context, args []string) error {
 			deleteTask(args[0])
 			return nil
+		},
+	},
+	{
+		Name: "reset",
+		Description: "deletes the current bucket",
+		ExecFunc: func(ctx context.Context, args []string) error {
+			deleteBucket()
+			return nil
+
 		},
 	},
 }
