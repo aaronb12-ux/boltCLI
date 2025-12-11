@@ -6,13 +6,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
+
 	"github.com/boltdb/bolt"
 	"github.com/cristalhq/acmd"
 )
 
-type Task struct {
-	Id int
-	TaskName string
+type Database struct {
+	database *bolt.DB
 }
 
 func home() {
@@ -28,16 +29,14 @@ func home() {
 
 
 
-func showTasks() {
-
-	db, _ := bolt.Open("my.db", 0600, nil)
+func showTasks(db *bolt.DB) {
 
 	db.View(func(tx *bolt.Tx) error {
 
 	b := tx.Bucket([]byte("TasksBucket"))
 
 	b.ForEach(func(k, v []byte) error {
-		fmt.Printf("key=%s, value=%s\n", k, v)
+		fmt.Printf("%v: %s\n", k[7], v[1 : len(v) - 1])
 		return nil
 	})
 
@@ -45,10 +44,7 @@ func showTasks() {
 })
 }
 
-func addKeyValue(args []string) {
-
-	db, _ := bolt.Open("my.db", 0600, nil)
-	
+func addKeyValue(args []string, db *bolt.DB) {
 
 	db.Update(func(tx *bolt.Tx) error {
 
@@ -62,6 +58,8 @@ func addKeyValue(args []string) {
 			return err
 		}
 
+		fmt.Printf("the id is %d", id)
+
 		e := b.Put([]byte(itob(int(id))), buff) //persist bytes to users bucket
 		
 		return e
@@ -74,13 +72,7 @@ func itob(v int) []byte {
 	return b
 }
 
-func initializeBucket() {
-
-	db, err := bolt.Open("my.db", 0600, nil)
-
-	if err != nil {
-		log.Fatal(err)
-	}
+func initializeBucket(db *bolt.DB) {
 
 	db.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucket([]byte("TasksBucket"))
@@ -92,33 +84,28 @@ func initializeBucket() {
 	})
 }
 
-func deleteTask(taskId string) {
+func deleteTask(taskId string, db *bolt.DB) {
 
-	db, err := bolt.Open("my.db", 0600, nil)
+	integerId, err := strconv.Atoi(taskId) //convert string to byte before deleting
 
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Error converting string to int %v", taskId)
 	}
 
 	db.Update(func(tx *bolt.Tx) error {
-
+	
 		b := tx.Bucket([]byte("TasksBucket"))
-		err := b.Delete([]byte(taskId))
+		err := b.Delete([]byte(itob(integerId)))
 
 		return err
 	})
 }
 
-func deleteBucket() {
+func deleteBucket(db *bolt.DB) {
 
-	db, err := bolt.Open("my.db", 0600, nil)
-	
-
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	db.Update(func(tx *bolt.Tx) error {
+
 		b := tx.Bucket([]byte("TasksBucket"))
 
 		b.ForEach(func(k, v []byte) error {
@@ -128,12 +115,18 @@ func deleteBucket() {
 		return err
 	})
 
-		return err
+		return nil
 	})
 }
 
 
 func main() {
+
+	db := &Database{} 
+
+	d, _ := bolt.Open("my.db", 0600, nil)
+
+	db.database = d
 
 	cmds := []acmd.Command{
 	{
@@ -148,7 +141,7 @@ func main() {
 		Name: "show",
 		Description: "shows all tasks",
 		ExecFunc: func(ctx context.Context, args []string) error {		
-			showTasks()
+			showTasks(db.database)
 			return nil
 		},
 	},
@@ -156,7 +149,7 @@ func main() {
 		Name: "init",
 		Description: "initializes tasks bucket",
 		ExecFunc: func(ctx context.Context, args []string) error {
-			initializeBucket()
+			initializeBucket(db.database)
 			return nil
 		},
 	},
@@ -164,7 +157,7 @@ func main() {
 		Name: "add",
 		Description: "adds a task to database",
 		ExecFunc: func(ctx context.Context, args []string) error {
-			addKeyValue(args)
+			addKeyValue(args, db.database)
 			return nil
 		},
 	},
@@ -172,7 +165,7 @@ func main() {
 		Name: "complete",
 		Description: "completes a task (removes from db)",
 		ExecFunc: func(ctx context.Context, args []string) error {
-			deleteTask(args[0])
+			deleteTask(args[0], db.database)
 			return nil
 		},
 	},
@@ -180,7 +173,7 @@ func main() {
 		Name: "reset",
 		Description: "deletes the current bucket",
 		ExecFunc: func(ctx context.Context, args []string) error {
-			deleteBucket()
+			deleteBucket(db.database)
 			return nil
 
 		},
@@ -195,6 +188,8 @@ if err := r.Run(); err != nil {
 	r.Exit(err)
 }
 }
+
+
 
 
 
